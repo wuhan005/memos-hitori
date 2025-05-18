@@ -45,7 +45,7 @@ jobs:
           tags: |
             type=semver,pattern={{version}},value=${{ env.VERSION }}
             type=semver,pattern={{major}}.{{minor}},value=${{ env.VERSION }}
-            type=raw,value=stable
+            type=raw,value=${{ env.VERSION }}
           flavor: |
             latest=false
           labels: |
@@ -64,6 +64,8 @@ jobs:
         working-directory: web
       - name: Run frontend build
         run: pnpm release
+        env:
+          VITE_BASE_URL: ${{ secrets.VITE_BASE_URL }}
         working-directory: web
 
       - name: Build and Push

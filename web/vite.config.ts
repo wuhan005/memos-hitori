@@ -12,6 +12,7 @@ if (process.env.DEV_PROXY_SERVER && process.env.DEV_PROXY_SERVER.length > 0) {
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  base: process.env.VITE_BASE_URL || "/",
   plugins: [
     react(),
     legacy({

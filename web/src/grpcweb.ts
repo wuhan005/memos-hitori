@@ -12,7 +12,7 @@ import { WorkspaceServiceDefinition } from "./types/proto/api/v1/workspace_servi
 import { WorkspaceSettingServiceDefinition } from "./types/proto/api/v1/workspace_setting_service";
 
 const channel = createChannel(
-  import.meta.env.VITE_BASE_URL || window.location.origin,
+  import.meta.env.VITE_BASE_URL.replace(/\/+$/, "") || window.location.origin,
   FetchTransport({
     credentials: "include",
   }),

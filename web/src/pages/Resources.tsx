@@ -3,6 +3,7 @@ import { Button, Input } from "@usememos/mui";
 import dayjs from "dayjs";
 import { includes } from "lodash-es";
 import { PaperclipIcon, SearchIcon, TrashIcon } from "lucide-react";
+import { observer } from "mobx-react-lite";
 import { useEffect, useState } from "react";
 import Empty from "@/components/Empty";
 import MobileHeader from "@/components/MobileHeader";
@@ -11,7 +12,7 @@ import { resourceServiceClient } from "@/grpcweb";
 import useLoading from "@/hooks/useLoading";
 import useResponsiveWidth from "@/hooks/useResponsiveWidth";
 import i18n from "@/i18n";
-import { useMemoStore } from "@/store/v1";
+import { memoStore } from "@/store/v2";
 import { Resource } from "@/types/proto/api/v1/resource_service";
 import { useTranslate } from "@/utils/i18n";
 
@@ -33,14 +34,13 @@ interface State {
   searchQuery: string;
 }
 
-const Resources = () => {
+const Resources = observer(() => {
   const t = useTranslate();
   const { md } = useResponsiveWidth();
   const loadingState = useLoading();
   const [state, setState] = useState<State>({
     searchQuery: "",
   });
-  const memoStore = useMemoStore();
   const [resources, setResources] = useState<Resource[]>([]);
   const filteredResources = resources.filter((resource) => includes(resource.filename, state.searchQuery));
   const groupedResources = groupResourcesByDate(filteredResources.filter((resource) => resource.memo));
@@ -76,7 +76,7 @@ const Resources = () => {
             </p>
             <div>
               <Input
-                className="max-w-[8rem]"
+                className="max-w-32"
                 placeholder={t("common.search")}
                 startDecorator={<SearchIcon className="w-4 h-auto" />}
                 value={state.searchQuery}
@@ -111,7 +111,7 @@ const Resources = () => {
                             {resources.map((resource) => {
                               return (
                                 <div key={resource.name} className="w-24 sm:w-32 h-auto flex flex-col justify-start items-start">
-                                  <div className="w-24 h-24 flex justify-center items-center sm:w-32 sm:h-32 border dark:border-zinc-900 overflow-clip rounded-xl cursor-pointer hover:shadow hover:opacity-80">
+                                  <div className="w-24 h-24 flex justify-center items-center sm:w-32 sm:h-32 border border-zinc-200 dark:border-zinc-900 overflow-clip rounded-xl cursor-pointer hover:shadow hover:opacity-80">
                                     <ResourceIcon resource={resource} strokeWidth={0.5} />
                                   </div>
                                   <div className="w-full max-w-full flex flex-row justify-between items-center mt-1 px-1">
@@ -143,7 +143,7 @@ const Resources = () => {
                             {unusedResources.map((resource) => {
                               return (
                                 <div key={resource.name} className="w-24 sm:w-32 h-auto flex flex-col justify-start items-start">
-                                  <div className="w-24 h-24 flex justify-center items-center sm:w-32 sm:h-32 border dark:border-zinc-900 overflow-clip rounded-xl cursor-pointer hover:shadow hover:opacity-80">
+                                  <div className="w-24 h-24 flex justify-center items-center sm:w-32 sm:h-32 border border-zinc-200 dark:border-zinc-900 overflow-clip rounded-xl cursor-pointer hover:shadow hover:opacity-80">
                                     <ResourceIcon resource={resource} strokeWidth={0.5} />
                                   </div>
                                   <div className="w-full max-w-full flex flex-row justify-between items-center mt-1 px-1">
@@ -165,6 +165,6 @@ const Resources = () => {
       </div>
     </section>
   );
-};
+});
 
 export default Resources;

@@ -9,7 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/Popover
 import { memoServiceClient } from "@/grpcweb";
 import { DEFAULT_LIST_MEMOS_PAGE_SIZE } from "@/helpers/consts";
 import useCurrentUser from "@/hooks/useCurrentUser";
-import { extractMemoIdFromName } from "@/store/v1";
+import { extractMemoIdFromName } from "@/store/common";
 import { Memo, MemoRelation_Memo, MemoRelation_Type } from "@/types/proto/api/v1/memo_service";
 import { useTranslate } from "@/utils/i18n";
 import { EditorRefActions } from "../Editor";
@@ -162,7 +162,7 @@ const AddMemoRelationPopover = (props: Props) => {
             )}
             renderTags={(memos) =>
               memos.map((memo) => (
-                <Chip key={memo.name} className="!max-w-full !rounded" variant="outlined" color="neutral">
+                <Chip key={memo.name} className="max-w-full! rounded!" variant="outlined" color="neutral">
                   <div className="w-full flex flex-col justify-start items-start">
                     <p className="text-xs text-gray-400 select-none">{memo.displayTime?.toLocaleString()}</p>
                     <span className="w-full text-sm leading-5 truncate">{memo.content}</span>

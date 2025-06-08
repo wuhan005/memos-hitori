@@ -1,8 +1,8 @@
-import legacy from "@vitejs/plugin-legacy";
 import react from "@vitejs/plugin-react";
 import { codeInspectorPlugin } from "code-inspector-plugin";
 import { resolve } from "path";
 import { defineConfig } from "vite";
+import tailwindcss from "@tailwindcss/vite";
 
 let devProxyServer = "http://localhost:8081";
 if (process.env.DEV_PROXY_SERVER && process.env.DEV_PROXY_SERVER.length > 0) {
@@ -15,9 +15,7 @@ export default defineConfig({
   base: process.env.VITE_BASE_URL || "/",
   plugins: [
     react(),
-    legacy({
-      targets: ["defaults", "not IE 11"],
-    }),
+    tailwindcss(),
     codeInspectorPlugin({
       bundler: "vite",
     }),
@@ -48,15 +46,10 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        entryFileNames: "assets/app.[hash].js",
-        chunkFileNames: "assets/[name].[hash].js",
-        assetFileNames: "assets/[name].[hash][extname]",
         manualChunks: {
-          "react-vendor": ["react", "react-dom", "react-router-dom"],
           "mui-vendor": ["@mui/joy", "@emotion/react", "@emotion/styled"],
-          "utils-vendor": ["dayjs", "lodash-es", "mobx", "mobx-react-lite"],
+          "utils-vendor": ["dayjs", "lodash-es"],
           "katex-vendor": ["katex"],
-          "highlight-vendor": ["highlight.js"],
           "mermaid-vendor": ["mermaid"],
           "leaflet-vendor": ["leaflet", "react-leaflet"],
         },

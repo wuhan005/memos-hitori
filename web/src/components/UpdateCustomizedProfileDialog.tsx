@@ -2,7 +2,7 @@ import { Button, Input, Textarea } from "@usememos/mui";
 import { XIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "react-hot-toast";
-import { workspaceSettingNamePrefix } from "@/store/v1";
+import { workspaceSettingNamePrefix } from "@/store/common";
 import { workspaceStore } from "@/store/v2";
 import { WorkspaceSettingKey } from "@/store/v2/workspace";
 import { WorkspaceCustomProfile } from "@/types/proto/api/v1/workspace_setting_service";
@@ -111,9 +111,9 @@ const UpdateCustomizedProfileDialog = ({ destroy }: Props) => {
         <p className="text-sm mb-1 mt-2">{t("setting.system-section.customize-server.description")}</p>
         <Textarea rows={3} fullWidth value={customProfile.description} onChange={handleDescriptionChanged} />
         <p className="text-sm mb-1 mt-2">{t("setting.system-section.customize-server.locale")}</p>
-        <LocaleSelect className="!w-full" value={customProfile.locale} onChange={handleLocaleSelectChange} />
+        <LocaleSelect className="w-full!" value={customProfile.locale} onChange={handleLocaleSelectChange} />
         <p className="text-sm mb-1 mt-2">{t("setting.system-section.customize-server.appearance")}</p>
-        <AppearanceSelect className="!w-full" value={customProfile.appearance as Appearance} onChange={handleAppearanceSelectChange} />
+        <AppearanceSelect className="w-full!" value={customProfile.appearance as Appearance} onChange={handleAppearanceSelectChange} />
         <div className="mt-4 w-full flex flex-row justify-between items-center space-x-2">
           <div className="flex flex-row justify-start items-center">
             <Button variant="outlined" onClick={handleRestoreButtonClick}>

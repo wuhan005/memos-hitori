@@ -6,8 +6,6 @@ import toast from "react-hot-toast";
 import { cn } from "@/utils";
 import MermaidBlock from "./MermaidBlock";
 import { BaseProps } from "./types";
-import "highlight.js/styles/atom-one-dark.css";
-import "highlight.js/styles/github.css";
 
 // Special languages that are rendered differently.
 enum SpecialLanguage {
@@ -27,7 +25,7 @@ const CodeBlock: React.FC<Props> = ({ language, content }: Props) => {
   if (formatedLanguage === SpecialLanguage.HTML) {
     return (
       <div
-        className="w-full overflow-auto !my-2"
+        className="w-full overflow-auto my-2!"
         dangerouslySetInnerHTML={{
           __html: content,
         }}

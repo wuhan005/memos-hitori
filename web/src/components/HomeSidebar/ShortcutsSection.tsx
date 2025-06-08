@@ -1,22 +1,22 @@
-import { Dropdown, Menu, MenuButton, MenuItem, Tooltip } from "@mui/joy";
+import { Tooltip } from "@mui/joy";
 import { Edit3Icon, MoreVerticalIcon, TrashIcon, PlusIcon } from "lucide-react";
 import { observer } from "mobx-react-lite";
-import { userServiceClient } from "@/grpcweb";
+import { shortcutServiceClient } from "@/grpcweb";
 import useAsyncEffect from "@/hooks/useAsyncEffect";
 import useCurrentUser from "@/hooks/useCurrentUser";
-import { useMemoFilterStore } from "@/store/v1";
 import { userStore } from "@/store/v2";
-import { Shortcut } from "@/types/proto/api/v1/user_service";
+import memoFilterStore from "@/store/v2/memoFilter";
+import { Shortcut } from "@/types/proto/api/v1/shortcut_service";
 import { cn } from "@/utils";
 import { useTranslate } from "@/utils/i18n";
 import showCreateShortcutDialog from "../CreateShortcutDialog";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/Popover";
 
 const emojiRegex = /^(\p{Emoji_Presentation}|\p{Emoji}\uFE0F)$/u;
 
 const ShortcutsSection = observer(() => {
   const t = useTranslate();
   const user = useCurrentUser();
-  const memoFilterStore = useMemoFilterStore();
   const shortcuts = userStore.state.shortcuts;
 
   useAsyncEffect(async () => {
@@ -26,7 +26,7 @@ const ShortcutsSection = observer(() => {
   const handleDeleteShortcut = async (shortcut: Shortcut) => {
     const confirmed = window.confirm("Are you sure you want to delete this shortcut?");
     if (confirmed) {
-      await userServiceClient.deleteShortcut({ parent: user.name, id: shortcut.id });
+      await shortcutServiceClient.deleteShortcut({ parent: user.name, id: shortcut.id });
       await userStore.fetchShortcuts();
     }
   };
@@ -57,21 +57,29 @@ const ShortcutsSection = observer(() => {
                 {emoji && <span className="text-base mr-1">{emoji}</span>}
                 {title.trim()}
               </span>
-              <Dropdown>
-                <MenuButton slots={{ root: "div" }}>
-                  <MoreVerticalIcon className="w-4 h-auto shrink-0 opacity-40" />
-                </MenuButton>
-                <Menu size="sm" placement="bottom-start">
-                  <MenuItem onClick={() => showCreateShortcutDialog({ shortcut })}>
-                    <Edit3Icon className="w-4 h-auto" />
-                    {t("common.edit")}
-                  </MenuItem>
-                  <MenuItem color="danger" onClick={() => handleDeleteShortcut(shortcut)}>
-                    <TrashIcon className="w-4 h-auto" />
-                    {t("common.delete")}
-                  </MenuItem>
-                </Menu>
-              </Dropdown>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <MoreVerticalIcon className="w-4 h-auto shrink-0 opacity-40 cursor-pointer hover:opacity-70" />
+                </PopoverTrigger>
+                <PopoverContent align="start" sideOffset={2}>
+                  <div className="flex flex-col gap-0.5">
+                    <button
+                      onClick={() => showCreateShortcutDialog({ shortcut })}
+                      className="flex items-center gap-1 px-2 py-1 text-sm text-left dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-700 outline-none rounded transition-colors"
+                    >
+                      <Edit3Icon className="w-4 h-auto" />
+                      {t("common.edit")}
+                    </button>
+                    <button
+                      onClick={() => handleDeleteShortcut(shortcut)}
+                      className="flex items-center gap-1 px-2 py-1 text-sm text-left text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-zinc-700 outline-none rounded transition-colors"
+                    >
+                      <TrashIcon className="w-4 h-auto" />
+                      {t("common.delete")}
+                    </button>
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
           );
         })}

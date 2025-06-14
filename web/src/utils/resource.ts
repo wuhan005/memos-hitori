@@ -5,7 +5,7 @@ export const getResourceUrl = (resource: Resource) => {
     return resource.externalLink;
   }
 
-  return `${window.location.origin}/file/${resource.name}/${resource.filename}`;
+  return `${import.meta.env.VITE_BASE_URL.replace(/\/+$/, "") || window.location.origin}/file/${resource.name}/${resource.filename}`;
 };
 
 export const getResourceType = (resource: Resource) => {

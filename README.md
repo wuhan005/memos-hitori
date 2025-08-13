@@ -70,7 +70,7 @@ Memos is a lightweight, self-hosted alternative to cloud-based note-taking servi
 
 ### Prerequisites
 
-- Docker or Docker Compose installed on your system
+- [Docker](https://www.docker.com/) or Docker Compose installed on your system
 - Minimum 512MB RAM and 1GB available disk space
 
 ### Docker Deployment
@@ -135,7 +135,7 @@ Memos supports multiple installation approaches to accommodate different deploym
 
 ### Binary Installation
 
-- **Pre-compiled Binaries**: Available for Linux, macOS, and Windows on the releases page
+- **Pre-compiled Binaries**: Available for Linux, macOS, and Windows on the [releases page](https://github.com/usememos/memos/releases)
 
 ### Source Installation
 
@@ -148,9 +148,9 @@ For detailed installation instructions, refer to the [comprehensive installation
 
 ### Prerequisites
 
-- Go 1.24 or later
-- Node.js 22+ and pnpm
-- Git for version control
+- [Go 1.24](https://go.dev/) or later
+- [Node.js 22+](https://nodejs.org/en) and [pnpm](https://pnpm.io/)
+- [Git](https://git-scm.com/) for version control
 
 ### Backend Development
 

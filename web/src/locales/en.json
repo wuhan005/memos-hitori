@@ -20,6 +20,8 @@
     "admin": "Admin",
     "archive": "Archive",
     "archived": "Archived",
+    "attachments": "Attachments",
+    "auto-expand": "Auto expand",
     "avatar": "Avatar",
     "basic": "Basic",
     "beta": "Beta",
@@ -122,7 +124,8 @@
   },
   "inbox": {
     "memo-comment": "{{user}} has a comment on your {{memo}}.",
-    "version-update": "New version {{version}} is available now!"
+    "version-update": "New version {{version}} is available now!",
+    "failed-to-load": "Failed to load inbox item"
   },
   "markdown": {
     "checkbox": "Checkbox",
@@ -161,7 +164,7 @@
     "visibility": {
       "disabled": "Public memos are disabled",
       "private": "Private",
-      "protected": "Workspace",
+      "protected": "Protected",
       "public": "Public"
     },
     "list": "List",
@@ -250,6 +253,21 @@
       "title": "Access Tokens",
       "token": "Token"
     },
+    "user-sessions-section": {
+      "title": "Active Sessions",
+      "description": "A list of all active sessions for your account. Sessions automatically expire 2 weeks after the last activity. You can revoke any session except the current one.",
+      "device": "Device",
+      "location": "Location",
+      "last-active": "Last Active",
+      "expires": "Expires",
+      "current": "Current",
+      "never": "Never",
+      "session-revocation": "Are you sure to revoke session {{sessionId}}? You will need to sign in again on that device.",
+      "session-revoked": "Session revoked successfully",
+      "revoke-session": "Revoke session",
+      "cannot-revoke-current": "Cannot revoke current session",
+      "no-sessions": "No active sessions found"
+    },
     "account-section": {
       "change-password": "Change password",
       "email-note": "Optional",
@@ -294,6 +312,7 @@
     "preference-section": {
       "default-memo-sort-option": "Memo display time",
       "default-memo-visibility": "Default memo visibility",
+      "apperance": "Appearance",
       "theme": "Theme"
     },
     "sso": "SSO",
@@ -425,5 +444,13 @@
     "rename-success": "Renamed tag successfully",
     "rename-tag": "Rename tag",
     "rename-tip": "All your memos with this tag will be updated."
+  },
+  "tooltip": {
+    "link-memo": "Link Memo", 
+    "markdown-menu": "Markdown",
+    "select-location": "Location",
+    "select-visibility": "Visibility", 
+    "tags": "Tags",
+    "upload-attachment":  "Upload Attachment(s)"
   }
 }

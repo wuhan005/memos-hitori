@@ -10,11 +10,9 @@ import (
 
 	"github.com/lithammer/shortuuid/v4"
 	"github.com/pkg/errors"
+	"github.com/usememos/gomark"
 	"github.com/usememos/gomark/ast"
-	"github.com/usememos/gomark/parser"
-	"github.com/usememos/gomark/parser/tokenizer"
 	"github.com/usememos/gomark/renderer"
-	"github.com/usememos/gomark/restore"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -63,6 +61,9 @@ func (s *APIV1Service) CreateMemo(ctx context.Context, request *v1pb.CreateMemoR
 	if err != nil {
 		return nil, err
 	}
+
+	attachments := []*store.Attachment{}
+
 	if len(request.Memo.Attachments) > 0 {
 		_, err := s.SetMemoAttachments(ctx, &v1pb.SetMemoAttachmentsRequest{
 			Name:        fmt.Sprintf("%s%s", MemoNamePrefix, memo.UID),
@@ -71,6 +72,14 @@ func (s *APIV1Service) CreateMemo(ctx context.Context, request *v1pb.CreateMemoR
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to set memo attachments")
 		}
+
+		a, err := s.Store.ListAttachments(ctx, &store.FindAttachment{
+			MemoID: &memo.ID,
+		})
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to get memo attachments")
+		}
+		attachments = a
 	}
 	if len(request.Memo.Relations) > 0 {
 		_, err := s.SetMemoRelations(ctx, &v1pb.SetMemoRelationsRequest{
@@ -82,7 +91,7 @@ func (s *APIV1Service) CreateMemo(ctx context.Context, request *v1pb.CreateMemoR
 		}
 	}
 
-	memoMessage, err := s.convertMemoFromStore(ctx, memo, nil)
+	memoMessage, err := s.convertMemoFromStore(ctx, memo, nil, attachments)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to convert memo")
 	}
@@ -179,32 +188,57 @@ func (s *APIV1Service) ListMemos(ctx context.Context, request *v1pb.ListMemosReq
 		}
 	}
 
-	reactionMap := make(map[string][]*store.Reaction)
-
-	memoNames := make([]string, 0, len(memos))
-	for _, m := range memos {
-		memoNames = append(memoNames, fmt.Sprintf("'%s/%s'", MemoNamePrefix, m.UID))
+	if len(memos) == 0 {
+		response := &v1pb.ListMemosResponse{
+			Memos:         memoMessages,
+			NextPageToken: nextPageToken,
+		}
+		return response, nil
 	}
 
-	if len(memoNames) > 0 {
-		reactions, err := s.Store.ListReactions(ctx, &store.FindReaction{
-			Filters: []string{fmt.Sprintf("content_id in [%s]", strings.Join(memoNames, ", "))},
-		})
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "failed to list reactions")
-		}
+	reactionMap := make(map[string][]*store.Reaction)
+	memoNames := make([]string, 0, len(memos))
 
-		for _, reaction := range reactions {
-			reactionMap[reaction.ContentID] = append(reactionMap[reaction.ContentID], reaction)
-		}
+	attachmentMap := make(map[int32][]*store.Attachment)
+	memoIDs := make([]string, 0, len(memos))
+
+	for _, m := range memos {
+		memoNames = append(memoNames, fmt.Sprintf("'%s%s'", MemoNamePrefix, m.UID))
+		memoIDs = append(memoIDs, fmt.Sprintf("'%d'", m.ID))
+	}
+
+	// REACTIONS
+	reactions, err := s.Store.ListReactions(ctx, &store.FindReaction{
+		Filters: []string{fmt.Sprintf("content_id in [%s]", strings.Join(memoNames, ", "))},
+	})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to list reactions")
+	}
+	for _, reaction := range reactions {
+		reactionMap[reaction.ContentID] = append(reactionMap[reaction.ContentID], reaction)
+	}
+
+	// ATTACHMENTS
+	attachments, err := s.Store.ListAttachments(ctx, &store.FindAttachment{
+		Filters: []string{fmt.Sprintf("memo_id in [%s]", strings.Join(memoIDs, ", "))},
+	})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to list attachments")
+	}
+	for _, attachment := range attachments {
+		attachmentMap[*attachment.MemoID] = append(attachmentMap[*attachment.MemoID], attachment)
 	}
 
 	for _, memo := range memos {
-		name := fmt.Sprintf("'%s/%s'", MemoNamePrefix, memo.UID)
-		memoMessage, err := s.convertMemoFromStore(ctx, memo, reactionMap[name])
+		memoName := fmt.Sprintf("%s%s", MemoNamePrefix, memo.UID)
+		reactions := reactionMap[memoName]
+		attachments := attachmentMap[memo.ID]
+
+		memoMessage, err := s.convertMemoFromStore(ctx, memo, reactions, attachments)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to convert memo")
 		}
+
 		memoMessages = append(memoMessages, memoMessage)
 	}
 
@@ -242,7 +276,21 @@ func (s *APIV1Service) GetMemo(ctx context.Context, request *v1pb.GetMemoRequest
 		}
 	}
 
-	memoMessage, err := s.convertMemoFromStore(ctx, memo, nil)
+	reactions, err := s.Store.ListReactions(ctx, &store.FindReaction{
+		ContentID: &request.Name,
+	})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to list reactions")
+	}
+
+	attachments, err := s.Store.ListAttachments(ctx, &store.FindAttachment{
+		MemoID: &memo.ID,
+	})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to list attachments")
+	}
+
+	memoMessage, err := s.convertMemoFromStore(ctx, memo, reactions, attachments)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to convert memo")
 	}
@@ -361,7 +409,20 @@ func (s *APIV1Service) UpdateMemo(ctx context.Context, request *v1pb.UpdateMemoR
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get memo")
 	}
-	memoMessage, err := s.convertMemoFromStore(ctx, memo, nil)
+	reactions, err := s.Store.ListReactions(ctx, &store.FindReaction{
+		ContentID: &request.Memo.Name,
+	})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to list reactions")
+	}
+	attachments, err := s.Store.ListAttachments(ctx, &store.FindAttachment{
+		MemoID: &memo.ID,
+	})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to list attachments")
+	}
+
+	memoMessage, err := s.convertMemoFromStore(ctx, memo, reactions, attachments)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to convert memo")
 	}
@@ -397,7 +458,21 @@ func (s *APIV1Service) DeleteMemo(ctx context.Context, request *v1pb.DeleteMemoR
 		return nil, status.Errorf(codes.PermissionDenied, "permission denied")
 	}
 
-	if memoMessage, err := s.convertMemoFromStore(ctx, memo, nil); err == nil {
+	reactions, err := s.Store.ListReactions(ctx, &store.FindReaction{
+		ContentID: &request.Name,
+	})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to list reactions")
+	}
+
+	attachments, err := s.Store.ListAttachments(ctx, &store.FindAttachment{
+		MemoID: &memo.ID,
+	})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to list attachments")
+	}
+
+	if memoMessage, err := s.convertMemoFromStore(ctx, memo, reactions, attachments); err == nil {
 		// Try to dispatch webhook when memo is deleted.
 		if err := s.DispatchMemoDeletedWebhook(ctx, memoMessage); err != nil {
 			slog.Warn("Failed to dispatch memo deleted webhook", slog.Any("err", err))
@@ -414,10 +489,6 @@ func (s *APIV1Service) DeleteMemo(ctx context.Context, request *v1pb.DeleteMemoR
 	}
 
 	// Delete related attachments.
-	attachments, err := s.Store.ListAttachments(ctx, &store.FindAttachment{MemoID: &memo.ID})
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to list attachments")
-	}
 	for _, attachment := range attachments {
 		if err := s.Store.DeleteAttachment(ctx, &store.DeleteAttachment{ID: attachment.ID}); err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to delete attachment")
@@ -543,25 +614,72 @@ func (s *APIV1Service) ListMemoComments(ctx context.Context, request *v1pb.ListM
 		return nil, status.Errorf(codes.Internal, "failed to list memo relations")
 	}
 
-	var memos []*v1pb.Memo
-	for _, memoRelation := range memoRelations {
-		memo, err := s.Store.GetMemo(ctx, &store.FindMemo{
-			ID: &memoRelation.MemoID,
-		})
+	if len(memoRelations) == 0 {
+		response := &v1pb.ListMemoCommentsResponse{
+			Memos: []*v1pb.Memo{},
+		}
+		return response, nil
+	}
+
+	memoRelationIDs := make([]string, 0, len(memoRelations))
+	for _, m := range memoRelations {
+		memoRelationIDs = append(memoRelationIDs, fmt.Sprintf("%d", m.MemoID))
+	}
+	memos, err := s.Store.ListMemos(ctx, &store.FindMemo{
+		Filters: []string{fmt.Sprintf("id in [%s]", strings.Join(memoRelationIDs, ", "))},
+	})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to list memos")
+	}
+
+	memoIDToNameMap := make(map[int32]string)
+	memoNamesForQuery := make([]string, 0, len(memos))
+	memoIDsForQuery := make([]string, 0, len(memos))
+
+	for _, memo := range memos {
+		memoName := fmt.Sprintf("%s%s", MemoNamePrefix, memo.UID)
+		memoIDToNameMap[memo.ID] = memoName
+		memoNamesForQuery = append(memoNamesForQuery, fmt.Sprintf("'%s'", memoName))
+		memoIDsForQuery = append(memoIDsForQuery, fmt.Sprintf("'%d'", memo.ID))
+	}
+	reactions, err := s.Store.ListReactions(ctx, &store.FindReaction{
+		Filters: []string{fmt.Sprintf("content_id in [%s]", strings.Join(memoNamesForQuery, ", "))},
+	})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to list reactions")
+	}
+
+	memoReactionsMap := make(map[string][]*store.Reaction)
+	for _, reaction := range reactions {
+		memoReactionsMap[reaction.ContentID] = append(memoReactionsMap[reaction.ContentID], reaction)
+	}
+
+	attachments, err := s.Store.ListAttachments(ctx, &store.FindAttachment{
+		Filters: []string{fmt.Sprintf("memo_id in [%s]", strings.Join(memoIDsForQuery, ", "))},
+	})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to list attachments")
+	}
+	attachmentMap := make(map[int32][]*store.Attachment)
+	for _, attachment := range attachments {
+		attachmentMap[*attachment.MemoID] = append(attachmentMap[*attachment.MemoID], attachment)
+	}
+
+	var memosResponse []*v1pb.Memo
+	for _, m := range memos {
+		memoName := memoIDToNameMap[m.ID]
+		reactions := memoReactionsMap[memoName]
+		attachments := attachmentMap[m.ID]
+
+		memoMessage, err := s.convertMemoFromStore(ctx, m, reactions, attachments)
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "failed to get memo")
+			return nil, errors.Wrap(err, "failed to convert memo")
 		}
-		if memo != nil {
-			memoMessage, err := s.convertMemoFromStore(ctx, memo, nil)
-			if err != nil {
-				return nil, errors.Wrap(err, "failed to convert memo")
-			}
-			memos = append(memos, memoMessage)
-		}
+		memosResponse = append(memosResponse, memoMessage)
 	}
 
 	response := &v1pb.ListMemoCommentsResponse{
-		Memos: memos,
+		Memos: memosResponse,
 	}
 	return response, nil
 }
@@ -591,16 +709,16 @@ func (s *APIV1Service) RenameMemoTag(ctx context.Context, request *v1pb.RenameMe
 	}
 
 	for _, memo := range memos {
-		nodes, err := parser.Parse(tokenizer.Tokenize(memo.Content))
+		doc, err := gomark.Parse(memo.Content)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to parse memo: %v", err)
 		}
-		memopayload.TraverseASTNodes(nodes, func(node ast.Node) {
+		memopayload.TraverseASTDocument(doc, func(node ast.Node) {
 			if tag, ok := node.(*ast.Tag); ok && tag.Content == request.OldTag {
 				tag.Content = request.NewTag
 			}
 		})
-		memo.Content = restore.Restore(nodes)
+		memo.Content = gomark.Restore(doc)
 		if err := memopayload.RebuildMemoPayload(memo); err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to rebuild memo payload: %v", err)
 		}
@@ -720,12 +838,12 @@ func convertMemoToWebhookPayload(memo *v1pb.Memo) (*webhook.WebhookRequestPayloa
 }
 
 func getMemoContentSnippet(content string) (string, error) {
-	nodes, err := parser.Parse(tokenizer.Tokenize(content))
+	doc, err := gomark.Parse(content)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to parse content")
 	}
 
-	plainText := renderer.NewStringRenderer().Render(nodes)
+	plainText := renderer.NewStringRenderer().RenderDocument(doc)
 	if len(plainText) > 64 {
 		return substring(plainText, 64) + "...", nil
 	}

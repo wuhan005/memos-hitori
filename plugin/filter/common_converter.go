@@ -11,23 +11,39 @@ import (
 
 // CommonSQLConverter handles the common CEL to SQL conversion logic.
 type CommonSQLConverter struct {
-	dialect    SQLDialect
-	paramIndex int
+	dialect       SQLDialect
+	paramIndex    int
+	allowedFields []string
+	entityType    string
 }
 
-// NewCommonSQLConverter creates a new converter with the specified dialect.
+// NewCommonSQLConverter creates a new converter with the specified dialect for memo filters.
 func NewCommonSQLConverter(dialect SQLDialect) *CommonSQLConverter {
 	return &CommonSQLConverter{
-		dialect:    dialect,
-		paramIndex: 1,
+		dialect:       dialect,
+		paramIndex:    1,
+		allowedFields: []string{"creator_id", "created_ts", "updated_ts", "visibility", "content", "pinned", "has_task_list", "has_link", "has_code", "has_incomplete_tasks"},
+		entityType:    "memo",
 	}
 }
 
-// NewCommonSQLConverterWithOffset creates a new converter with the specified dialect and parameter offset.
+// NewCommonSQLConverterWithOffset creates a new converter with the specified dialect and parameter offset for memo filters.
 func NewCommonSQLConverterWithOffset(dialect SQLDialect, offset int) *CommonSQLConverter {
 	return &CommonSQLConverter{
-		dialect:    dialect,
-		paramIndex: offset + 1,
+		dialect:       dialect,
+		paramIndex:    offset + 1,
+		allowedFields: []string{"creator_id", "created_ts", "updated_ts", "visibility", "content", "pinned", "has_task_list", "has_link", "has_code", "has_incomplete_tasks"},
+		entityType:    "memo",
+	}
+}
+
+// NewUserSQLConverter creates a new converter for user filters.
+func NewUserSQLConverter(dialect SQLDialect) *CommonSQLConverter {
+	return &CommonSQLConverter{
+		dialect:       dialect,
+		paramIndex:    1,
+		allowedFields: []string{"username"},
+		entityType:    "user",
 	}
 }
 
@@ -45,6 +61,8 @@ func (c *CommonSQLConverter) ConvertExprToSQL(ctx *ConvertContext, expr *exprv1.
 			return c.handleInOperator(ctx, v.CallExpr)
 		case "contains":
 			return c.handleContainsOperator(ctx, v.CallExpr)
+		default:
+			return errors.Errorf("unsupported call expression function: %s", v.CallExpr.Function)
 		}
 	} else if v, ok := expr.ExprKind.(*exprv1.Expr_IdentExpr); ok {
 		return c.handleIdentifier(ctx, v.IdentExpr)
@@ -122,7 +140,7 @@ func (c *CommonSQLConverter) handleComparisonOperator(ctx *ConvertContext, callE
 		return err
 	}
 
-	if !slices.Contains([]string{"creator_id", "created_ts", "updated_ts", "visibility", "content", "pinned", "has_task_list", "has_link", "has_code", "has_incomplete_tasks"}, identifier) {
+	if !slices.Contains(c.allowedFields, identifier) {
 		return errors.Errorf("invalid identifier for %s", callExpr.Function)
 	}
 
@@ -133,20 +151,35 @@ func (c *CommonSQLConverter) handleComparisonOperator(ctx *ConvertContext, callE
 
 	operator := c.getComparisonOperator(callExpr.Function)
 
-	switch identifier {
-	case "created_ts", "updated_ts":
-		return c.handleTimestampComparison(ctx, identifier, operator, value)
-	case "visibility", "content":
-		return c.handleStringComparison(ctx, identifier, operator, value)
-	case "creator_id":
-		return c.handleIntComparison(ctx, identifier, operator, value)
-	case "pinned":
-		return c.handlePinnedComparison(ctx, operator, value)
-	case "has_task_list", "has_link", "has_code", "has_incomplete_tasks":
-		return c.handleBooleanComparison(ctx, identifier, operator, value)
+	// Handle memo fields
+	if c.entityType == "memo" {
+		switch identifier {
+		case "created_ts", "updated_ts":
+			return c.handleTimestampComparison(ctx, identifier, operator, value)
+		case "visibility", "content":
+			return c.handleStringComparison(ctx, identifier, operator, value)
+		case "creator_id":
+			return c.handleIntComparison(ctx, identifier, operator, value)
+		case "pinned":
+			return c.handlePinnedComparison(ctx, operator, value)
+		case "has_task_list", "has_link", "has_code", "has_incomplete_tasks":
+			return c.handleBooleanComparison(ctx, identifier, operator, value)
+		default:
+			return errors.Errorf("unsupported identifier in comparison: %s", identifier)
+		}
 	}
 
-	return nil
+	// Handle user fields
+	if c.entityType == "user" {
+		switch identifier {
+		case "username":
+			return c.handleUserStringComparison(ctx, identifier, operator, value)
+		default:
+			return errors.Errorf("unsupported user identifier in comparison: %s", identifier)
+		}
+	}
+
+	return errors.Errorf("unsupported entity type: %s", c.entityType)
 }
 
 func (c *CommonSQLConverter) handleSizeComparison(ctx *ConvertContext, callExpr *exprv1.Expr_Call, sizeCall *exprv1.Expr_Call) error {
@@ -207,7 +240,7 @@ func (c *CommonSQLConverter) handleInOperator(ctx *ConvertContext, callExpr *exp
 		return err
 	}
 
-	if !slices.Contains([]string{"tag", "visibility", "content_id"}, identifier) {
+	if !slices.Contains([]string{"tag", "visibility", "content_id", "memo_id"}, identifier) {
 		return errors.Errorf("invalid identifier for %s", callExpr.Function)
 	}
 
@@ -226,6 +259,8 @@ func (c *CommonSQLConverter) handleInOperator(ctx *ConvertContext, callExpr *exp
 		return c.handleVisibilityInList(ctx, values)
 	} else if identifier == "content_id" {
 		return c.handleContentIDInList(ctx, values)
+	} else if identifier == "memo_id" {
+		return c.handleMemoIDInList(ctx, values)
 	}
 
 	return nil
@@ -333,6 +368,28 @@ func (c *CommonSQLConverter) handleContentIDInList(ctx *ConvertContext, values [
 	return nil
 }
 
+func (c *CommonSQLConverter) handleMemoIDInList(ctx *ConvertContext, values []any) error {
+	placeholders := []string{}
+	for range values {
+		placeholders = append(placeholders, c.dialect.GetParameterPlaceholder(c.paramIndex))
+		c.paramIndex++
+	}
+
+	tablePrefix := c.dialect.GetTablePrefix("resource")
+	if _, ok := c.dialect.(*PostgreSQLDialect); ok {
+		if _, err := ctx.Buffer.WriteString(fmt.Sprintf("%s.memo_id IN (%s)", tablePrefix, strings.Join(placeholders, ","))); err != nil {
+			return err
+		}
+	} else {
+		if _, err := ctx.Buffer.WriteString(fmt.Sprintf("%s.`memo_id` IN (%s)", tablePrefix, strings.Join(placeholders, ","))); err != nil {
+			return err
+		}
+	}
+
+	ctx.Args = append(ctx.Args, values...)
+	return nil
+}
+
 func (c *CommonSQLConverter) handleContainsOperator(ctx *ConvertContext, callExpr *exprv1.Expr_Call) error {
 	if len(callExpr.Args) != 1 {
 		return errors.Errorf("invalid number of arguments for %s", callExpr.Function)
@@ -373,6 +430,11 @@ func (c *CommonSQLConverter) handleContainsOperator(ctx *ConvertContext, callExp
 
 func (c *CommonSQLConverter) handleIdentifier(ctx *ConvertContext, identExpr *exprv1.Expr_Ident) error {
 	identifier := identExpr.GetName()
+
+	// Only memo entity has boolean identifiers that can be used standalone
+	if c.entityType != "memo" {
+		return errors.Errorf("invalid identifier %s for entity type %s", identifier, c.entityType)
+	}
 
 	if !slices.Contains([]string{"pinned", "has_task_list", "has_link", "has_code", "has_incomplete_tasks"}, identifier) {
 		return errors.Errorf("invalid identifier %s", identifier)
@@ -463,6 +525,36 @@ func (c *CommonSQLConverter) handleStringComparison(ctx *ConvertContext, field, 
 	return nil
 }
 
+func (c *CommonSQLConverter) handleUserStringComparison(ctx *ConvertContext, field, operator string, value interface{}) error {
+	if operator != "=" && operator != "!=" {
+		return errors.Errorf("invalid operator for %s", field)
+	}
+
+	valueStr, ok := value.(string)
+	if !ok {
+		return errors.New("invalid string value")
+	}
+
+	tablePrefix := c.dialect.GetTablePrefix("user")
+
+	if _, ok := c.dialect.(*PostgreSQLDialect); ok {
+		// PostgreSQL doesn't use backticks
+		if _, err := ctx.Buffer.WriteString(fmt.Sprintf("%s.%s %s %s", tablePrefix, field, operator, c.dialect.GetParameterPlaceholder(c.paramIndex))); err != nil {
+			return err
+		}
+	} else {
+		// MySQL and SQLite use backticks
+		if _, err := ctx.Buffer.WriteString(fmt.Sprintf("%s.`%s` %s %s", tablePrefix, field, operator, c.dialect.GetParameterPlaceholder(c.paramIndex))); err != nil {
+			return err
+		}
+	}
+
+	ctx.Args = append(ctx.Args, valueStr)
+	c.paramIndex++
+
+	return nil
+}
+
 func (c *CommonSQLConverter) handleIntComparison(ctx *ConvertContext, field, operator string, value interface{}) error {
 	if operator != "=" && operator != "!=" {
 		return errors.Errorf("invalid operator for %s", field)
@@ -543,6 +635,8 @@ func (c *CommonSQLConverter) handleBooleanComparison(ctx *ConvertContext, field,
 		jsonPath = "$.property.hasCode"
 	case "has_incomplete_tasks":
 		jsonPath = "$.property.hasIncompleteTasks"
+	default:
+		return errors.Errorf("unsupported boolean field: %s", field)
 	}
 
 	// Special handling for SQLite based on field

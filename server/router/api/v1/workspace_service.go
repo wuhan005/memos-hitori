@@ -141,6 +141,8 @@ func convertWorkspaceSettingToStore(setting *v1pb.WorkspaceSetting) *storepb.Wor
 		workspaceSetting.Value = &storepb.WorkspaceSetting_MemoRelatedSetting{
 			MemoRelatedSetting: convertWorkspaceMemoRelatedSettingToStore(setting.GetMemoRelatedSetting()),
 		}
+	default:
+		// Keep the default GeneralSetting value
 	}
 	return workspaceSetting
 }
@@ -171,7 +173,6 @@ func convertWorkspaceGeneralSettingFromStore(setting *storepb.WorkspaceGeneralSe
 			Description: setting.CustomProfile.Description,
 			LogoUrl:     setting.CustomProfile.LogoUrl,
 			Locale:      setting.CustomProfile.Locale,
-			Appearance:  setting.CustomProfile.Appearance,
 		}
 	}
 	return generalSetting
@@ -197,7 +198,6 @@ func convertWorkspaceGeneralSettingToStore(setting *v1pb.WorkspaceSetting_Genera
 			Description: setting.CustomProfile.Description,
 			LogoUrl:     setting.CustomProfile.LogoUrl,
 			Locale:      setting.CustomProfile.Locale,
-			Appearance:  setting.CustomProfile.Appearance,
 		}
 	}
 	return generalSetting
